@@ -161,7 +161,7 @@ async def process_name(message: Message, state: FSMContext):
 
         data['name'] = message.text
 
-        if 'address' in data.keys():
+        if 'address' in data.keys() and 'contacts' in data.keys():
 
             await confirm(message)
             await CheckoutState.confirm.set()
@@ -169,7 +169,35 @@ async def process_name(message: Message, state: FSMContext):
         else:
 
             await CheckoutState.next()
-            await message.answer('Укажите свой адрес места жительства.',
+            await message.answer('Укажите контакты для связи.',
+                                 reply_markup=back_markup())
+
+
+@dp.message_handler(IsUser(), text=back_message, state=CheckoutState.contacts)
+async def proces_contacts_back(message: Message, state: FSMContext):
+
+    async with state.proxy() as data:
+
+        await message.answer('Изменить имя с <b>' + data['name'] + '</b>?',
+                             reply_markup=back_markup())
+
+    await CheckoutState.name.set()
+
+
+@dp.message_handler(IsUser(), state=CheckoutState.contacts)
+async def process_phone(message: Message, state: FSMContext):
+    async with state.proxy() as data:
+        data['contacts'] = message.text
+
+        if 'name' in data.keys() and 'address' in data.keys():
+
+            await confirm(message)
+            await CheckoutState.confirm.set()
+
+        else:
+
+            await CheckoutState.next()
+            await message.answer('Укажите адрес для доставки.',
                                  reply_markup=back_markup())
 
 
@@ -178,10 +206,10 @@ async def process_address_back(message: Message, state: FSMContext):
 
     async with state.proxy() as data:
 
-        await message.answer('Изменить имя с <b>' + data['name'] + '</b>?',
+        await message.answer('Изменить контакты с <b>' + data['contacts'] + '</b>?',
                              reply_markup=back_markup())
 
-    await CheckoutState.name.set()
+    await CheckoutState.contacts.set()
 
 
 @dp.message_handler(IsUser(), state=CheckoutState.address)
@@ -232,13 +260,17 @@ async def process_confirm(message: Message, state: FSMContext):
                         for idx, quantity in db.fetchall('''SELECT idx, quantity FROM cart
             WHERE cid=?''', (cid,))]  # idx=quantity
 
-            db.query('INSERT INTO orders VALUES (?, ?, ?, ?)',
-                     (cid, data['name'], data['address'], ' '.join(products)))
+            db.query('INSERT INTO orders VALUES (?, ?, ?, ?, ?)',
+                     (cid, data['name'], data['address'], data['contacts'], ' '.join(products)))
 
             db.query('DELETE FROM cart WHERE cid=?', (cid,))
 
-            await message.answer('Ок! Ваш заказ уже в пути 🚀\nИмя: <b>' + data['name'] + '</b>\nАдрес: <b>' + data['address'] + '</b>',
-                                 reply_markup=markup)
+            text = 'Ок! Ваш заказ уже в пути 🚀'
+            text += '\nИмя: <b>' + data['name'] + '</b>'
+            text += '\nАдрес: <b>' + data['address'] + '</b>'
+            text += '\nКонтакты: <b>' + data['contacts'] + '</b>'
+
+            await message.answer(text, reply_markup=markup)
     else:
 
         await message.answer('У вас недостаточно денег на счете. Пополните баланс!',
